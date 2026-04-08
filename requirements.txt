@@ -1,7 +1,7 @@
-streamlit==1.32.0
-tensorflow-cpu==2.13.0
-numpy==1.24.3
-pillow==10.0.1
-matplotlib==3.7.2
-gtts==2.3.2
-opencv-python-headless==4.8.1.78
+streamlit
+numpy
+pillow
+matplotlib
+gtts
+opencv-python-headless
+tflite-runtime
