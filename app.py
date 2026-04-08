@@ -1,11 +1,11 @@
 import streamlit as st
 import numpy as np
-import tensorflow as tf
 from PIL import Image
 import matplotlib.pyplot as plt
 from gtts import gTTS
 import base64
 import tempfile
+import tflite_runtime.interpreter as tflite
 
 # -------------------------------
 # CONFIG
@@ -13,13 +13,18 @@ import tempfile
 CLASS_NAMES = ['Early Blight', 'Late Blight', 'Healthy']
 
 # -------------------------------
-# LOAD MODEL
+# LOAD TFLITE MODEL
 # -------------------------------
 @st.cache_resource
-def load_my_model():
-    return tf.keras.models.load_model("model.h5")
+def load_model():
+    interpreter = tflite.Interpreter(model_path="model.tflite")
+    interpreter.allocate_tensors()
+    return interpreter
 
-model = load_my_model()
+interpreter = load_model()
+
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
 
 # -------------------------------
 # PREPROCESS
@@ -28,7 +33,20 @@ def preprocess_image(img):
     img = img.convert("RGB")
     img = np.array(img)
     img = np.expand_dims(img, axis=0)
+
+    # Convert to float32 (IMPORTANT for TFLite)
+    img = img.astype(np.float32)
+
     return img
+
+# -------------------------------
+# PREDICTION FUNCTION
+# -------------------------------
+def predict(img):
+    interpreter.set_tensor(input_details[0]['index'], img)
+    interpreter.invoke()
+    output = interpreter.get_tensor(output_details[0]['index'])
+    return output[0]
 
 # -------------------------------
 # AUTO PLAY AUDIO
@@ -49,7 +67,6 @@ def autoplay_audio(file_path):
 # MULTI-LANGUAGE MESSAGES
 # -------------------------------
 def get_message(predicted_class, lang):
-
     messages = {
         "English": {
             "Healthy": "The plant is healthy",
@@ -81,7 +98,7 @@ def get_message(predicted_class, lang):
     return messages[lang][predicted_class]
 
 # -------------------------------
-# LANGUAGE CODE MAP
+# LANGUAGE MAP
 # -------------------------------
 lang_code_map = {
     "English": "en",
@@ -103,6 +120,8 @@ def speak(text, lang_code):
 # -------------------------------
 # UI
 # -------------------------------
+st.set_page_config(page_title="Potato Disease Detection", page_icon="🌿")
+
 st.title("🌿 Potato Disease Detection with AI")
 
 language = st.selectbox(
@@ -119,9 +138,10 @@ if uploaded_file:
     img_pil = Image.open(uploaded_file)
     st.image(img_pil, caption="Uploaded Image", use_column_width=True)
 
-    img_array = preprocess_image(img_pil)
+    img = preprocess_image(img_pil)
 
-    prediction = model.predict(img_array)[0]
+    prediction = predict(img)
+
     class_index = np.argmax(prediction)
     confidence = float(np.max(prediction))
     predicted_class = CLASS_NAMES[class_index]
@@ -136,7 +156,7 @@ if uploaded_file:
     else:
         st.error(f"🦠 {predicted_class}")
 
-    st.info(f"Confidence: {confidence*100:.2f}%")
+    st.info(f"Confidence: {confidence * 100:.2f}%")
 
     # -------------------------------
     # GRAPH
@@ -151,7 +171,7 @@ if uploaded_file:
     st.pyplot(fig)
 
     # -------------------------------
-    # 🔊 AUTO VOICE OUTPUT
+    # 🔊 AUTO VOICE
     # -------------------------------
     st.subheader("🔊 Voice Output")
 
